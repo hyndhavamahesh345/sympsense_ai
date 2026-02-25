@@ -3,7 +3,7 @@ export type AlertStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'ESCALATED' | 'RESOLVED';
 export type PatientStatus = 'STABLE' | 'AT_RISK' | 'CRITICAL';
 
 // New: Simulation Scenarios for demo purposes
-export type SimulationScenario = 'NORMAL' | 'HYPOXIA_EVENT' | 'CARDIAC_EVENT' | 'SEPSIS_ONSET' | 'RECOVERY';
+export type SimulationScenario = 'NORMAL' | 'HYPOXIA_EVENT' | 'CARDIAC_EVENT' | 'SEPSIS_ONSET' | 'RECOVERY' | 'BRADYCARDIA_EVENT' | 'HYPERTENSION_EVENT';
 
 export interface Vitals {
   timestamp: string;
@@ -33,7 +33,7 @@ export interface Patient {
 export interface Alert {
   id: string;
   patientId: string;
-  type: 'Cardiac' | 'Hypoxia' | 'Shock' | 'Sepsis' | 'Fall';
+  type: 'Cardiac' | 'Hypoxia' | 'Shock' | 'Sepsis' | 'Fall' | 'Septic' | 'Respiratory' | 'Bradycardia' | 'Hypertension' | 'Hyperthermia' | 'Hypothermia';
   severity: Severity;
   message: string;
   timestamp: string;

@@ -89,14 +89,52 @@ export const SimulationProvider = ({ children }: { children: ReactNode }) => {
         return prevPatients.map(p => {
           // 1. Generate new vitals based on SCENARIO
           const newVitals = generateVitals(p.currentVitals, p.activeScenario);
-          
+
           // 2. Update History (Keep last 60 points = 1 min for demo)
           const newHistory = [...p.history, newVitals].slice(-60);
 
-          // 3. Run "Agents" (Logic Checks)
+          // 3. Predictive Analysis (The "Intelligence" Layer)
+          const recentHistory = p.history.slice(-10); // Last 10 points
+
+          if (recentHistory.length >= 5) {
+            const first = recentHistory[0];
+            const last = newVitals;
+
+            // Calculate Rates of Change (units per 10s roughly)
+            const spo2Rate = last.SpO2 - first.SpO2;
+            const sbpRate = last.SBP - first.SBP;
+            const hrRate = last.HR - first.HR;
+
+            // PREDICTIVE AGENT 1: Desaturation Risk
+            // If SpO2 is dropping > 2% in 10s and is already below 96%
+            if (spo2Rate <= -2 && last.SpO2 < 96) {
+              triggerAlert(p.id, 'Hypoxia', 'HIGH', `PREDICTIVE: Rapid desaturation detected (${spo2Rate}% drop). Probable hypoxia onset.`);
+            }
+
+            // PREDICTIVE AGENT 2: Shock/Hemodynamic Risk
+            // Falling BP combined with Rising HR is a classic sign of compensated shock
+            if (sbpRate <= -8 && hrRate >= 8) {
+              triggerAlert(p.id, 'Shock', 'CRITICAL', `PREDICTIVE: Hemodynamic collapse risk. Rising HR with falling BP detected.`);
+            }
+
+            // PREDICTIVE AGENT 3: Tachycardia Trend
+            if (hrRate >= 15 && last.HR > 100) {
+              triggerAlert(p.id, 'Cardiac', 'MEDIUM', `PREDICTIVE: Significant heart rate upward trend (+${hrRate} bpm).`);
+            }
+
+            // NEW PREDICTIVE AGENT 4: Fever-Resp Correlation
+            // Rising temp with rising RR often precedes pulmonary decompensation
+            const tempRate = last.Temp - first.Temp;
+            const rrRate = last.RR - first.RR;
+            if (tempRate > 0.3 && rrRate >= 4) {
+              triggerAlert(p.id, 'Septic', 'HIGH', `PREDICTIVE: Rising febrile-respiratory trend. Possible secondary infection.`);
+            }
+          }
+
+          // 4. Reactive Agents (Logic Checks)
           let newStatus: PatientStatus = 'STABLE';
           let isCritical = false;
-          
+
           // Hypoxia Agent
           if (newVitals.SpO2 < 88) {
             newStatus = 'CRITICAL';
@@ -104,24 +142,59 @@ export const SimulationProvider = ({ children }: { children: ReactNode }) => {
             triggerAlert(p.id, 'Hypoxia', 'CRITICAL', `Critical Desaturation: SpO2 ${newVitals.SpO2}%`);
           } else if (newVitals.SpO2 < 94) {
             if (!isCritical) newStatus = 'AT_RISK';
-            // Only trigger medium alert occasionally to avoid spam, or if not already active
-            if (Math.random() > 0.95) triggerAlert(p.id, 'Hypoxia', 'MEDIUM', `SpO2 trending low: ${newVitals.SpO2}%`);
+            if (Math.random() > 0.98) triggerAlert(p.id, 'Hypoxia', 'MEDIUM', `SpO2 level low: ${newVitals.SpO2}%`);
           }
 
-          // Cardiac Agent
-          if (newVitals.HR > 140 || newVitals.HR < 40) {
+          // Cardiac Agent (Tachycardia / Bradycardia)
+          if (newVitals.HR > 140) {
             newStatus = 'CRITICAL';
             isCritical = true;
-            triggerAlert(p.id, 'Cardiac', 'CRITICAL', `Dangerous Arrhythmia: HR ${newVitals.HR}`);
-          } else if (newVitals.HR > 110) {
+            triggerAlert(p.id, 'Cardiac', 'CRITICAL', `Critical Tachycardia: HR ${newVitals.HR}`);
+          } else if (newVitals.HR < 45) {
+            newStatus = 'CRITICAL';
+            isCritical = true;
+            triggerAlert(p.id, 'Bradycardia', 'CRITICAL', `Critical Bradycardia: HR ${newVitals.HR}`);
+          } else if (newVitals.HR > 110 || newVitals.HR < 55) {
             if (!isCritical) newStatus = 'AT_RISK';
-            if (Math.random() > 0.95) triggerAlert(p.id, 'Cardiac', 'HIGH', `Tachycardia detected: HR ${newVitals.HR}`);
           }
 
-          // Sepsis Agent (Temp + HR combo)
-          if (newVitals.Temp > 38.5 && newVitals.HR > 100) {
+          // Blood Pressure Agent (Hypertension / Hypotension)
+          if (newVitals.SBP > 180) {
+            newStatus = 'CRITICAL';
+            isCritical = true;
+            triggerAlert(p.id, 'Hypertension', 'CRITICAL', `Hypertensive Crisis: SBP ${newVitals.SBP} mmHg`);
+          } else if (newVitals.SBP < 90) {
+            newStatus = 'CRITICAL';
+            isCritical = true;
+            triggerAlert(p.id, 'Shock', 'CRITICAL', `Critical Hypotension: SBP ${newVitals.SBP} mmHg`);
+          } else if (newVitals.SBP > 150 || newVitals.SBP < 100) {
             if (!isCritical) newStatus = 'AT_RISK';
-            triggerAlert(p.id, 'Sepsis', 'HIGH', `Sepsis Screen Positive: Temp ${newVitals.Temp}°C + HR ${newVitals.HR}`);
+          }
+
+          // Thermal Agent (Fever / Sepsis / Hypothermia)
+          if (newVitals.Temp > 40.0) {
+            newStatus = 'CRITICAL';
+            isCritical = true;
+            triggerAlert(p.id, 'Hyperthermia', 'CRITICAL', `Critical Hyperpyrexia: Temp ${newVitals.Temp}°C`);
+          } else if (newVitals.Temp < 35.5) {
+            newStatus = 'CRITICAL';
+            isCritical = true;
+            triggerAlert(p.id, 'Hypothermia', 'CRITICAL', `Hypothermia Warning: Temp ${newVitals.Temp}°C`);
+          } else if (newVitals.Temp > 38.8 && newVitals.HR > 110) {
+            if (!isCritical) newStatus = 'CRITICAL';
+            triggerAlert(p.id, 'Sepsis', 'CRITICAL', `Sepsis Alert: Hyperthermia (${newVitals.Temp}°C) with Tachycardia.`);
+          } else if (newVitals.Temp > 38.0) {
+            if (!isCritical) newStatus = 'AT_RISK';
+          }
+
+          // Respiratory Distress Agent
+          if (newVitals.RR > 32 || newVitals.RR < 8) {
+            newStatus = 'CRITICAL';
+            isCritical = true;
+            triggerAlert(p.id, 'Respiratory', 'CRITICAL', `Ventilatory Failure Risk: RR ${newVitals.RR}`);
+          } else if (newVitals.RR > 24) {
+            if (!isCritical) newStatus = 'AT_RISK';
+            triggerAlert(p.id, 'Respiratory', 'HIGH', `Tachypnea detected: RR ${newVitals.RR}`);
           }
 
           // Fall Agent
@@ -141,24 +214,31 @@ export const SimulationProvider = ({ children }: { children: ReactNode }) => {
       });
     }, 1000); // 1 second tick
 
+
     return () => clearInterval(interval);
   }, []);
 
   const triggerAlert = (patientId: string, type: Alert['type'], severity: Alert['severity'], message: string) => {
     setAlerts(prev => {
-      // Avoid spamming duplicate active alerts of same type
+      const severityValues: Record<Alert['severity'], number> = {
+        'CRITICAL': 3,
+        'HIGH': 2,
+        'MEDIUM': 1,
+        'LOW': 0
+      };
+
       const existing = prev.find(a => a.patientId === patientId && a.type === type && a.status !== 'RESOLVED');
-      
-      // If existing alert is lower severity, upgrade it
+
       if (existing) {
-        if (severity === 'CRITICAL' && existing.severity !== 'CRITICAL') {
-           return prev.map(a => a.id === existing.id ? { ...a, severity: 'CRITICAL', message, timestamp: new Date().toISOString() } : a);
+        // Upgrade severity if new one is higher
+        if (severityValues[severity] > severityValues[existing.severity]) {
+          return prev.map(a => a.id === existing.id ? { ...a, severity, message, timestamp: new Date().toISOString() } : a);
         }
         return prev;
       }
 
       const newAlert: Alert = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).slice(2, 11),
         patientId,
         type,
         severity,

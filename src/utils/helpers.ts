@@ -12,39 +12,51 @@ const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, 
 // Advanced Generator: Uses trends based on the active scenario
 export const generateVitals = (prev: Vitals, scenario: SimulationScenario): Vitals => {
   const now = new Date();
-  
+
   // 1. Base fluctuation (natural noise)
   let hrChange = (Math.random() - 0.5) * 2;
   let spo2Change = (Math.random() - 0.5) * 1;
   let sbpChange = (Math.random() - 0.5) * 2;
-  
+
   // 2. Scenario-based forcing functions (The "Trend")
   switch (scenario) {
     case 'HYPOXIA_EVENT':
       // SpO2 drops rapidly, HR increases slightly (compensation)
-      spo2Change -= 0.8; 
+      spo2Change -= 0.8;
       hrChange += 0.5;
       break;
-    
+
     case 'CARDIAC_EVENT':
-      // HR spikes or drops dangerously
-      hrChange += 2.5; 
-      sbpChange -= 1.5; // BP drops
+      // Dangerous Tachypnea/Tachycardia spike
+      hrChange += 3.0;
+      sbpChange -= 1.0;
+      break;
+
+    case 'BRADYCARDIA_EVENT':
+      // HR drops significantly
+      hrChange -= 2.0;
+      sbpChange -= 0.5;
+      break;
+
+    case 'HYPERTENSION_EVENT':
+      // BP spikes dangerously
+      sbpChange += 2.5;
+      hrChange += 0.5;
       break;
 
     case 'SEPSIS_ONSET':
-      // Temp rises, HR rises, BP drops slowly
-      hrChange += 0.2;
-      sbpChange -= 0.2;
-      // Temp handled separately below
+      // Temp rises faster, HR follows
+      hrChange += 0.4;
+      sbpChange -= 0.3;
       break;
 
     case 'RECOVERY':
-      // Return to normal ranges
-      if (prev.SpO2 < 98) spo2Change += 1.5;
-      if (prev.HR > 75) hrChange -= 1.0;
-      if (prev.HR < 60) hrChange += 1.0;
-      if (prev.SBP < 120) sbpChange += 1.0;
+      // Return to normal ranges faster
+      if (prev.SpO2 < 98) spo2Change += 1.0;
+      if (prev.HR > 80) hrChange -= 1.5;
+      if (prev.HR < 65) hrChange += 1.5;
+      if (prev.SBP < 115) sbpChange += 1.5;
+      if (prev.SBP > 125) sbpChange -= 1.5;
       break;
 
     case 'NORMAL':
@@ -60,7 +72,7 @@ export const generateVitals = (prev: Vitals, scenario: SimulationScenario): Vita
   const newSpO2 = clamp(prev.SpO2 + spo2Change, 60, 100);
   const newSBP = clamp(prev.SBP + sbpChange, 50, 220);
   const newDBP = clamp(newSBP * 0.65 + (Math.random() - 0.5) * 2, 40, 130); // DBP linked to SBP roughly
-  
+
   // Temp logic
   const tempChange = (Math.random() - 0.5) * 0.1;
   let adjustedTempChange = tempChange;
